@@ -226,6 +226,13 @@ const DATE_FORMAT: &[BorrowedFormatItem<'_>] = &[
 
 impl Serialize for Date {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if cfg!(feature = "serde-well-known") {
+            let Ok(s) = self.format(&DATE_FORMAT) else {
+                return Err(S::Error::custom("failed formatting `Date`"));
+            };
+            return serializer.serialize_str(&s);
+        }
+        
         #[cfg(feature = "serde-human-readable")]
         if serializer.is_human_readable() {
             let Ok(s) = self.format(&DATE_FORMAT) else {
@@ -240,7 +247,9 @@ impl Serialize for Date {
 
 impl<'a> Deserialize<'a> for Date {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
-        if cfg!(feature = "serde-human-readable") && deserializer.is_human_readable() {
+        if cfg!(feature = "serde-well-known") {
+            deserializer.deserialize_any(Visitor::<Self>(PhantomData))
+        } else if cfg!(feature = "serde-human-readable") && deserializer.is_human_readable() {
             deserializer.deserialize_any(Visitor::<Self>(PhantomData))
         } else {
             deserializer.deserialize_tuple(2, Visitor::<Self>(PhantomData))
@@ -289,6 +298,11 @@ const OFFSET_DATE_TIME_FORMAT: &[BorrowedFormatItem<'_>] = &[
 
 impl Serialize for OffsetDateTime {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if cfg!(feature = "serde-well-known") {
+            // Serialize as RFC3339
+            return rfc3339::serialize(self, serializer);
+        }
+        
         #[cfg(feature = "serde-human-readable")]
         if serializer.is_human_readable() {
             let Ok(s) = self.format(&OFFSET_DATE_TIME_FORMAT) else {
@@ -314,7 +328,10 @@ impl Serialize for OffsetDateTime {
 
 impl<'a> Deserialize<'a> for OffsetDateTime {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
-        if cfg!(feature = "serde-human-readable") && deserializer.is_human_readable() {
+        if cfg!(feature = "serde-well-known") {
+            // Deserialize as RFC3339
+            return rfc3339::deserialize(deserializer);
+        } else if cfg!(feature = "serde-human-readable") && deserializer.is_human_readable() {
             deserializer.deserialize_any(Visitor::<Self>(PhantomData))
         } else {
             deserializer.deserialize_tuple(9, Visitor::<Self>(PhantomData))
